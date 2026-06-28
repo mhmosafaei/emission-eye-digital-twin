@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from simulator_core.enrichment import enrich_simulator_batch
 
 from .database import get_session, init_db
-from .models import BaselineComparison, EnrichedRecord, FeatureRow, PerformanceWindow
+from .models import BaselineComparison, EnrichedRecord, FeatureRow, MLPrediction, PerformanceWindow
 
 
 @contextmanager
@@ -327,6 +327,28 @@ def get_performance_windows(
         return list(db.execute(statement).scalars().all())
 
 
+def get_predictable_performance_windows(
+    vessel_id: str | None = None,
+    limit: int = 100,
+    session: Session | None = None,
+) -> list[PerformanceWindow]:
+    statement: Select[tuple[PerformanceWindow]] = (
+        select(PerformanceWindow)
+        .where(
+            PerformanceWindow.is_valid_window.is_(True),
+            PerformanceWindow.avg_co2_kg_nm.is_not(None),
+            PerformanceWindow.avg_fuel_kg_nm.is_not(None),
+            PerformanceWindow.avg_sog_kn.is_not(None),
+        )
+        .order_by(PerformanceWindow.window_start_utc.asc(), PerformanceWindow.id.asc())
+        .limit(limit)
+    )
+    if vessel_id:
+        statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
 def count_performance_windows(vessel_id: str | None = None, session: Session | None = None) -> int:
     statement = select(func.count(PerformanceWindow.id))
     if vessel_id:
@@ -360,6 +382,35 @@ def get_uncompared_performance_windows(
         statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
     if valid_windows_only:
         statement = statement.where(PerformanceWindow.is_valid_window.is_(True))
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def get_unpredicted_performance_windows_for_model(
+    *,
+    model_version: str,
+    vessel_id: str | None = None,
+    limit: int = 100,
+    session: Session | None = None,
+) -> list[PerformanceWindow]:
+    statement: Select[tuple[PerformanceWindow]] = (
+        select(PerformanceWindow)
+        .outerjoin(
+            MLPrediction,
+            (MLPrediction.window_id == PerformanceWindow.id) & (MLPrediction.model_version == model_version),
+        )
+        .where(
+            MLPrediction.id.is_(None),
+            PerformanceWindow.is_valid_window.is_(True),
+            PerformanceWindow.avg_co2_kg_nm.is_not(None),
+            PerformanceWindow.avg_fuel_kg_nm.is_not(None),
+            PerformanceWindow.avg_sog_kn.is_not(None),
+        )
+        .order_by(PerformanceWindow.window_start_utc.asc(), PerformanceWindow.id.asc())
+        .limit(limit)
+    )
+    if vessel_id:
+        statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
     with session_scope(session) as db:
         return list(db.execute(statement).scalars().all())
 
@@ -638,6 +689,62 @@ def get_baseline_summary(vessel_id: str | None = None, session: Session | None =
     }
 
 
+def create_ml_prediction(prediction: MLPrediction | dict, session: Session | None = None) -> MLPrediction:
+    init_db()
+    payload = _ml_prediction_payload(prediction)
+    with session_scope(session) as db:
+        existing = db.execute(
+            select(MLPrediction).where(
+                MLPrediction.window_id == payload["window_id"],
+                MLPrediction.model_version == payload["model_version"],
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+
+        model = MLPrediction(**payload)
+        db.add(model)
+        db.flush()
+        if session is None:
+            db.commit()
+            db.refresh(model)
+        return model
+
+
+def create_ml_predictions(predictions: list[MLPrediction | dict], session: Session | None = None) -> list[MLPrediction]:
+    created: list[MLPrediction] = []
+    with session_scope(session) as db:
+        for prediction in predictions:
+            created.append(create_ml_prediction(prediction, session=db))
+        if session is None:
+            db.commit()
+    return created
+
+
+def get_ml_predictions(
+    vessel_id: str | None = None,
+    classification: str | None = None,
+    limit: int = 100,
+    session: Session | None = None,
+) -> list[MLPrediction]:
+    statement: Select[tuple[MLPrediction]] = select(MLPrediction)
+    if vessel_id:
+        statement = statement.where(MLPrediction.vessel_id == vessel_id)
+    if classification:
+        statement = statement.where(MLPrediction.classification == classification)
+    statement = statement.order_by(desc(MLPrediction.created_at), desc(MLPrediction.id)).limit(limit)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def get_latest_ml_prediction(vessel_id: str | None = None, session: Session | None = None) -> MLPrediction | None:
+    statement = select(MLPrediction).order_by(desc(MLPrediction.created_at), desc(MLPrediction.id)).limit(1)
+    if vessel_id:
+        statement = statement.where(MLPrediction.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return db.execute(statement).scalar_one_or_none()
+
+
 def get_feature_rows_for_windowing(vessel_id: str | None = None, session: Session | None = None) -> list[FeatureRow]:
     statement: Select[tuple[FeatureRow]] = select(FeatureRow).order_by(FeatureRow.vessel_id.asc(), FeatureRow.timestamp_utc.asc(), FeatureRow.id.asc())
     if vessel_id:
@@ -766,4 +873,14 @@ def _comparison_payload(comparison: BaselineComparison | dict) -> dict[str, Any]
         payload["possible_causes_json"] = json.dumps(payload["possible_causes_json"])
     if isinstance(payload.get("advisor_json"), dict):
         payload["advisor_json"] = json.dumps(payload["advisor_json"])
+    return payload
+
+
+def _ml_prediction_payload(prediction: MLPrediction | dict) -> dict[str, Any]:
+    if isinstance(prediction, MLPrediction):
+        return {column.name: getattr(prediction, column.name) for column in MLPrediction.__table__.columns if column.name != "id"}
+    payload = dict(prediction)
+    payload.setdefault("prediction_uuid", str(uuid.uuid4()))
+    if isinstance(payload.get("model_metadata_json"), dict):
+        payload["model_metadata_json"] = json.dumps(payload["model_metadata_json"])
     return payload

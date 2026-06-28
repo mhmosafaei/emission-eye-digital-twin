@@ -4,7 +4,7 @@ This repository builds the simulator-side foundation and backend plumbing for th
 
 ## Current flow
 
-`simulator.py -> sea-passage demo generation -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows -> performance windows -> baseline comparisons -> baseline analytics/advisor -> ML-readiness diagnostics -> Sprint 6 decision gate`
+`simulator.py -> sea-passage demo generation -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows -> performance windows -> baseline comparisons -> baseline analytics/advisor -> ML-readiness diagnostics -> ML expected CO2 model -> actual vs ML-expected CO2 predictions -> API/demo outputs`
 
 The simulator remains the source of raw telemetry. The enrichment layer adds:
 
@@ -52,6 +52,12 @@ python scripts/export_worst_windows_csv.py --output data/worst_windows.csv --lim
 
 python scripts/export_ml_readiness_report.py --output data/ml_readiness_report.json --pretty
 
+python scripts/train_expected_co2_model.py
+
+python scripts/predict_expected_co2.py --limit 500
+
+python scripts/export_ml_predictions_csv.py --output data/ml_predictions.csv
+
 python scripts/export_windows_csv.py --output data/performance_windows.csv --sea-passage-only
 
 python scripts/export_baseline_comparisons_csv.py \
@@ -70,7 +76,7 @@ python scripts/reset_local_db.py --yes
 uvicorn app.main:app --reload
 ```
 
-Sprint 5.5 does not train an ML model, does not build a dashboard, and does not add real-time alert delivery. Sprint 5.5 creates a stronger demo dataset and tells us whether Sprint 6 ML is justified.
+Sprint 6 trains the first expected CO2 model, keeps ML predictions separate from historical baseline comparisons, does not build a dashboard, does not add alert delivery, and does not modify `simulator.py`.
 
 ## API examples
 
@@ -116,4 +122,14 @@ curl http://localhost:8000/ml-readiness/window-coverage
 curl http://localhost:8000/ml-readiness/state-buckets
 
 curl http://localhost:8000/ml-readiness/vessels
+
+curl -X POST http://localhost:8000/ml/train
+
+curl http://localhost:8000/ml/model-metadata
+
+curl -X POST "http://localhost:8000/ml/predict?limit=500"
+
+curl http://localhost:8000/ml/predictions/latest
+
+curl http://localhost:8000/ml/summary
 ```

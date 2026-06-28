@@ -347,3 +347,80 @@ class MLReadinessSummaryOut(BaseModel):
     blocking_reasons: list[str]
     warnings: list[str]
     recommended_next_action: str
+
+
+class MLTrainingSummaryOut(BaseModel):
+    model_type: str
+    target_column: str
+    train_rows: int
+    test_rows: int
+    mae: float | None = None
+    rmse: float | None = None
+    r2: float | None = None
+    mape_pct: float | None = None
+    model_version: str
+    model_path: str
+    metadata_path: str
+    feature_columns: list[str]
+    created_at: str
+
+
+class MLModelMetadataOut(BaseModel):
+    model_type: str
+    target_column: str
+    train_rows: int
+    test_rows: int
+    mae: float | None = None
+    rmse: float | None = None
+    r2: float | None = None
+    mape_pct: float | None = None
+    dummy_mae: float | None = None
+    dummy_rmse: float | None = None
+    dummy_r2: float | None = None
+    dummy_mape_pct: float | None = None
+    feature_columns: list[str]
+    raw_feature_columns: list[str]
+    model_version: str
+    created_at: str
+    model_path: str
+    metadata_path: str
+    vessel_id: str | None = None
+
+
+class MLPredictSummaryOut(BaseModel):
+    predictions_created: int
+    model_version: str | None = None
+    model_type: str | None = None
+    summary: dict[str, Any] | None = None
+
+
+class MLPredictionResultOut(ModelBase):
+    id: int
+    prediction_uuid: str
+    window_id: int
+    vessel_id: str
+    window_start_utc: str | None = None
+    actual_co2_kg_nm: float | None = None
+    expected_co2_kg_nm: float | None = None
+    ml_gap_kg_nm: float | None = None
+    ml_gap_pct: float | None = None
+    classification: str
+    prediction_status: str
+    model_type: str | None = None
+    model_version: str | None = None
+    model_metadata_json: str | None = None
+    interpretation: str | None = None
+    created_at: datetime
+
+
+class MLPredictionSummaryOut(BaseModel):
+    total_predictions: int
+    ml_better: int
+    ml_normal: int
+    ml_worse: int
+    average_ml_gap_pct: float | None = None
+    worst_ml_gap_pct: float | None = None
+    best_ml_gap_pct: float | None = None
+    model_type: str | None = None
+    model_version: str | None = None
+    interpretation: str

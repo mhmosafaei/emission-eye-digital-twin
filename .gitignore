@@ -6,6 +6,9 @@ data/*.jsonl
 data/*.csv
 data/*.json
 data/*.sqlite3
+data/models/*.joblib
+data/models/*.pkl
+data/models/*metadata*.json
 
 .env
 .venv/

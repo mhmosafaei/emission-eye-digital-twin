@@ -164,6 +164,11 @@ class PerformanceWindow(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    ml_predictions: Mapped[list["MLPrediction"]] = relationship(
+        "MLPrediction",
+        back_populates="window",
+        cascade="all, delete-orphan",
+    )
 
 
 class BaselineComparison(Base):
@@ -198,3 +203,31 @@ class BaselineComparison(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     window: Mapped[PerformanceWindow] = relationship("PerformanceWindow", back_populates="baseline_comparison")
+
+
+class MLPrediction(Base):
+    __tablename__ = "ml_predictions"
+    __table_args__ = (
+        UniqueConstraint("window_id", "model_version", name="uq_ml_predictions_window_model_version"),
+        Index("ix_ml_predictions_vessel_id", "vessel_id"),
+        Index("ix_ml_predictions_classification", "classification"),
+        Index("ix_ml_predictions_model_version", "model_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prediction_uuid: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    window_id: Mapped[int] = mapped_column(ForeignKey("performance_windows.id"), nullable=False)
+    vessel_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    window_start_utc: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actual_co2_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_co2_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_gap_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml_gap_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    classification: Mapped[str] = mapped_column(String(64), nullable=False)
+    prediction_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    model_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    model_metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    window: Mapped[PerformanceWindow] = relationship("PerformanceWindow", back_populates="ml_predictions")

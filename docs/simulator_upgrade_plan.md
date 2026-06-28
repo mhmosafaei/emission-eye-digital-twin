@@ -200,6 +200,32 @@ curl.exe http://localhost:8000/ml-readiness/state-buckets
 curl.exe http://localhost:8000/ml-readiness/vessels
 ```
 
+## Sprint 6 - ML Expected CO2 Twin
+
+Sprint 6 adds the first trained expected-CO2 model on top of the validated demo dataset:
+
+`simulator.py -> enrichment -> feature_rows -> performance_windows -> baseline_comparisons -> baseline analytics/advisor -> ML-readiness diagnostics -> ML expected CO2 model -> actual vs ML-expected CO2 predictions -> API/demo outputs`
+
+Sprint 6 trains the first expected CO2 model, keeps ML predictions separate from historical baseline comparisons, does not build a dashboard, does not add alert delivery, and does not modify `simulator.py`.
+
+### Example commands
+
+```bash
+python scripts/train_expected_co2_model.py
+python scripts/predict_expected_co2.py --limit 500
+python scripts/export_ml_predictions_csv.py --output data/ml_predictions.csv
+```
+
+### API examples
+
+```bash
+curl.exe -X POST http://localhost:8000/ml/train
+curl.exe http://localhost:8000/ml/model-metadata
+curl.exe -X POST "http://localhost:8000/ml/predict?limit=500"
+curl.exe http://localhost:8000/ml/predictions/latest
+curl.exe http://localhost:8000/ml/summary
+```
+
 ## What remains intentionally simple
 
 - Machinery formulas are configurable heuristics, not a final marine physics model.

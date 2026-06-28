@@ -2,3 +2,5 @@ fastapi
 sqlalchemy
 uvicorn
 httpx
+scikit-learn
+joblib
