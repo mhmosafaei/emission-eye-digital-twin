@@ -1,0 +1,11 @@
+scenario_name: demo_heavy_weather
+vessel_type: BulkerVessel
+route_name: gulf_crossing
+fuel_type: MGO_PROXY
+loading_condition: ballast
+weather_severity: severe
+wave_direction_mode: beam_sea
+fouling_level: light
+sensor_quality_mode: low
+duration_minutes: 540
+random_seed: 202

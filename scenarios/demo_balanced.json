@@ -1,0 +1,13 @@
+{
+  "scenario_name": "demo_balanced",
+  "vessel_type": "ContainerVessel",
+  "route_name": "baltic_loop",
+  "fuel_type": "MGO_PROXY",
+  "loading_condition": "laden",
+  "weather_severity": "moderate",
+  "wave_direction_mode": "head_sea",
+  "fouling_level": "moderate",
+  "sensor_quality_mode": "standard",
+  "duration_minutes": 360,
+  "random_seed": 101
+}
