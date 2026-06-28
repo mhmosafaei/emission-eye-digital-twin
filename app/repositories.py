@@ -242,6 +242,14 @@ def count_feature_rows(vessel_id: str | None = None, session: Session | None = N
         return int(db.execute(statement).scalar_one())
 
 
+def count_valid_feature_rows(vessel_id: str | None = None, session: Session | None = None) -> int:
+    statement = select(func.count(FeatureRow.id)).where(FeatureRow.is_valid_for_training.is_(True))
+    if vessel_id:
+        statement = statement.where(FeatureRow.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return int(db.execute(statement).scalar_one())
+
+
 def get_state_bucket_counts(session: Session | None = None) -> list[dict[str, Any]]:
     statement = (
         select(
@@ -321,6 +329,14 @@ def get_performance_windows(
 
 def count_performance_windows(vessel_id: str | None = None, session: Session | None = None) -> int:
     statement = select(func.count(PerformanceWindow.id))
+    if vessel_id:
+        statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return int(db.execute(statement).scalar_one())
+
+
+def count_valid_performance_windows(vessel_id: str | None = None, session: Session | None = None) -> int:
+    statement = select(func.count(PerformanceWindow.id)).where(PerformanceWindow.is_valid_window.is_(True))
     if vessel_id:
         statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
     with session_scope(session) as db:
@@ -464,6 +480,111 @@ def get_distinct_vessel_ids_with_comparisons(session: Session | None = None) -> 
     )
     with session_scope(session) as db:
         return [str(value) for value in db.execute(statement).scalars().all()]
+
+
+def count_completed_baseline_comparisons(session: Session | None = None) -> int:
+    statement = select(func.count(BaselineComparison.id)).where(
+        BaselineComparison.comparison_status == "completed",
+        BaselineComparison.classification.in_(("better", "normal", "worse")),
+    )
+    with session_scope(session) as db:
+        return int(db.execute(statement).scalar_one())
+
+
+def count_distinct_vessels_with_windows(valid_only: bool = True, session: Session | None = None) -> int:
+    statement = select(func.count(func.distinct(PerformanceWindow.vessel_id)))
+    if valid_only:
+        statement = statement.where(PerformanceWindow.is_valid_window.is_(True))
+    with session_scope(session) as db:
+        return int(db.execute(statement).scalar_one())
+
+
+def get_state_bucket_window_counts(valid_only: bool = True, session: Session | None = None) -> list[dict[str, Any]]:
+    statement = (
+        select(
+            PerformanceWindow.dominant_state_bucket,
+            func.count(PerformanceWindow.id).label("window_count"),
+            func.count(func.distinct(PerformanceWindow.vessel_id)).label("vessel_count"),
+        )
+        .where(PerformanceWindow.dominant_state_bucket.is_not(None))
+        .group_by(PerformanceWindow.dominant_state_bucket)
+        .order_by(desc("window_count"), PerformanceWindow.dominant_state_bucket.asc())
+    )
+    if valid_only:
+        statement = statement.where(PerformanceWindow.is_valid_window.is_(True))
+    with session_scope(session) as db:
+        rows = db.execute(statement).all()
+        return [
+            {
+                "state_bucket": row.dominant_state_bucket,
+                "window_count": int(row.window_count or 0),
+                "vessel_count": int(row.vessel_count or 0),
+            }
+            for row in rows
+        ]
+
+
+def get_vessel_window_coverage(session: Session | None = None) -> list[dict[str, Any]]:
+    statement = (
+        select(
+            PerformanceWindow.vessel_id,
+            func.count(PerformanceWindow.id).label("total_windows"),
+            func.sum(case((PerformanceWindow.is_valid_window.is_(True), 1), else_=0)).label("valid_windows"),
+            func.count(func.distinct(PerformanceWindow.dominant_state_bucket)).label("distinct_state_buckets"),
+            func.avg(PerformanceWindow.training_valid_rate).label("average_training_valid_rate"),
+        )
+        .group_by(PerformanceWindow.vessel_id)
+        .order_by(PerformanceWindow.vessel_id.asc())
+    )
+    with session_scope(session) as db:
+        rows = db.execute(statement).all()
+        return [
+            {
+                "vessel_id": str(row.vessel_id),
+                "total_windows": int(row.total_windows or 0),
+                "valid_windows": int(row.valid_windows or 0),
+                "distinct_state_buckets": int(row.distinct_state_buckets or 0),
+                "average_training_valid_rate": round(float(row.average_training_valid_rate), 6) if row.average_training_valid_rate is not None else None,
+            }
+            for row in rows
+        ]
+
+
+def get_vessel_completed_comparison_counts(session: Session | None = None) -> list[dict[str, Any]]:
+    statement = (
+        select(
+            BaselineComparison.vessel_id,
+            func.count(BaselineComparison.id).label("completed_comparisons"),
+            func.avg(BaselineComparison.baseline_confidence).label("average_baseline_confidence"),
+        )
+        .where(
+            BaselineComparison.comparison_status == "completed",
+            BaselineComparison.classification.in_(("better", "normal", "worse")),
+        )
+        .group_by(BaselineComparison.vessel_id)
+        .order_by(BaselineComparison.vessel_id.asc())
+    )
+    with session_scope(session) as db:
+        rows = db.execute(statement).all()
+        return [
+            {
+                "vessel_id": str(row.vessel_id),
+                "completed_comparisons": int(row.completed_comparisons or 0),
+                "average_baseline_confidence": round(float(row.average_baseline_confidence), 6) if row.average_baseline_confidence is not None else None,
+            }
+            for row in rows
+        ]
+
+
+def get_average_baseline_confidence(session: Session | None = None) -> float | None:
+    statement = select(func.avg(BaselineComparison.baseline_confidence)).where(
+        BaselineComparison.comparison_status == "completed",
+        BaselineComparison.classification.in_(("better", "normal", "worse")),
+        BaselineComparison.baseline_confidence.is_not(None),
+    )
+    with session_scope(session) as db:
+        value = db.execute(statement).scalar_one()
+        return round(float(value), 6) if value is not None else None
 
 
 def get_latest_baseline_comparison(vessel_id: str | None = None, session: Session | None = None) -> BaselineComparison | None:

@@ -176,6 +176,30 @@ curl.exe http://localhost:8000/analytics/causes
 curl.exe http://localhost:8000/analytics/fleet-ranking
 ```
 
+## Sprint 5.5 - Demo Dataset Expansion + ML Readiness Diagnostics
+
+Sprint 5.5 strengthens the demo dataset and adds a transparent readiness gate before Sprint 6:
+
+`simulator.py -> sea-passage demo generation -> enrichment -> feature_rows -> performance_windows -> baseline_comparisons -> baseline analytics/advisor -> ML-readiness diagnostics -> Sprint 6 decision gate`
+
+This sprint does not train an ML model, does not build a dashboard, and does not add alert delivery. It expands sea-passage demo generation, improves repeated bucket coverage, and reports whether Sprint 6 ML is justified.
+
+### Example commands
+
+```bash
+python scripts/build_demo_dataset.py --batches 3000 --vessels 5 --seed 42 --reset-db
+python scripts/export_ml_readiness_report.py --output data/ml_readiness_report.json --pretty
+```
+
+### API examples
+
+```bash
+curl.exe http://localhost:8000/ml-readiness/summary
+curl.exe http://localhost:8000/ml-readiness/window-coverage
+curl.exe http://localhost:8000/ml-readiness/state-buckets
+curl.exe http://localhost:8000/ml-readiness/vessels
+```
+
 ## What remains intentionally simple
 
 - Machinery formulas are configurable heuristics, not a final marine physics model.

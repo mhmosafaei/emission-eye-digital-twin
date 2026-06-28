@@ -4,7 +4,7 @@ This repository builds the simulator-side foundation and backend plumbing for th
 
 ## Current flow
 
-`simulator.py -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows -> performance windows -> baseline comparisons -> baseline analytics/advisor -> API/demo outputs`
+`simulator.py -> sea-passage demo generation -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows -> performance windows -> baseline comparisons -> baseline analytics/advisor -> ML-readiness diagnostics -> Sprint 6 decision gate`
 
 The simulator remains the source of raw telemetry. The enrichment layer adds:
 
@@ -24,8 +24,12 @@ python scripts/run_simulator_limited.py \
   --output data/simulator_output.jsonl \
   --batches 200 \
   --profile sea-passage \
+  --vessels 5 \
+  --repeat-state-buckets \
   --reset-output \
   --seed 42
+
+python scripts/build_demo_dataset.py --batches 3000 --vessels 5 --seed 42 --reset-db
 
 python scripts/enrich_simulator_jsonl.py \
   --input data/simulator_output.jsonl \
@@ -46,6 +50,8 @@ python scripts/export_analytics_summary.py --output data/analytics_summary.json
 
 python scripts/export_worst_windows_csv.py --output data/worst_windows.csv --limit 20
 
+python scripts/export_ml_readiness_report.py --output data/ml_readiness_report.json --pretty
+
 python scripts/export_windows_csv.py --output data/performance_windows.csv --sea-passage-only
 
 python scripts/export_baseline_comparisons_csv.py \
@@ -64,7 +70,7 @@ python scripts/reset_local_db.py --yes
 uvicorn app.main:app --reload
 ```
 
-Sprint 5 does not train an ML model, does not build a UI dashboard, and does not add real-time alert delivery. Sprint 5 turns completed baseline comparisons into explainable operational analytics.
+Sprint 5.5 does not train an ML model, does not build a dashboard, and does not add real-time alert delivery. Sprint 5.5 creates a stronger demo dataset and tells us whether Sprint 6 ML is justified.
 
 ## API examples
 
@@ -102,4 +108,12 @@ curl http://localhost:8000/analytics/trend
 curl http://localhost:8000/analytics/causes
 
 curl http://localhost:8000/analytics/fleet-ranking
+
+curl http://localhost:8000/ml-readiness/summary
+
+curl http://localhost:8000/ml-readiness/window-coverage
+
+curl http://localhost:8000/ml-readiness/state-buckets
+
+curl http://localhost:8000/ml-readiness/vessels
 ```

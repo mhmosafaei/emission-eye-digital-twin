@@ -76,3 +76,46 @@ def test_sea_passage_profile_has_steaming_or_sea_passage_records() -> None:
         assert any(mode == "Steaming" for mode in vessel_modes)
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_run_simulator_limited_supports_multi_vessel_generation() -> None:
+    tmp_path = make_workspace_temp_dir()
+    try:
+        output_path = tmp_path / "multi_vessel.jsonl"
+        summary = run_simulator_limited(
+            output_path,
+            10,
+            profile="sea-passage",
+            reset_output=True,
+            seed=21,
+            vessels=5,
+            repeat_state_buckets=True,
+        )
+        batches = read_batches(output_path)
+        vessel_ids = {
+            item.get("node_id")
+            for batch in batches
+            for item in batch.get("items", [])
+        }
+        assert summary["vessels_requested"] == 5
+        assert len(vessel_ids) >= 5
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_run_simulator_limited_records_per_vessel_expands_batch_count() -> None:
+    tmp_path = make_workspace_temp_dir()
+    try:
+        output_path = tmp_path / "records_per_vessel.jsonl"
+        summary = run_simulator_limited(
+            output_path,
+            3,
+            profile="sea-passage",
+            reset_output=True,
+            seed=22,
+            vessels=4,
+            records_per_vessel=3,
+        )
+        assert summary["batches_written"] == 12
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)

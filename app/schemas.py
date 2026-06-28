@@ -287,3 +287,63 @@ class FleetRankingOut(BaseModel):
     normal: int
     dominant_classification: str | None = None
     baseline_confidence_mean: float | None = None
+
+
+class WindowCoverageSummaryOut(BaseModel):
+    enriched_records: int
+    feature_rows: int
+    valid_feature_rows: int
+    performance_windows: int
+    valid_performance_windows: int
+    completed_baseline_comparisons: int
+    distinct_vessels: int
+    average_baseline_confidence: float | None = None
+
+
+class StateBucketCoverageRowOut(BaseModel):
+    state_bucket: str | None = None
+    window_count: int
+    vessel_count: int
+
+
+class StateBucketCoverageSummaryOut(BaseModel):
+    distinct_state_buckets: int
+    repeated_state_buckets: int
+    average_windows_per_repeated_bucket: float
+    top_state_buckets: list[StateBucketCoverageRowOut]
+
+
+class VesselTrainingCoverageOut(BaseModel):
+    vessel_id: str
+    total_windows: int
+    valid_windows: int
+    distinct_state_buckets: int
+    repeated_state_buckets: int
+    average_training_valid_rate: float | None = None
+    completed_comparisons: int
+    average_baseline_confidence: float | None = None
+    trend_direction: str
+    trend_ready: bool
+    ml_training_candidate: bool
+
+
+class MLReadinessSummaryOut(BaseModel):
+    enriched_records: int
+    feature_rows: int
+    valid_feature_rows: int
+    performance_windows: int
+    valid_performance_windows: int
+    completed_baseline_comparisons: int
+    distinct_vessels: int
+    distinct_state_buckets: int
+    repeated_state_buckets: int
+    average_windows_per_repeated_bucket: float
+    average_baseline_confidence: float | None = None
+    trend_ready_vessels: int
+    vessel_training_coverage: list[VesselTrainingCoverageOut]
+    ml_ready: bool
+    readiness_level: str
+    readiness_score: int
+    blocking_reasons: list[str]
+    warnings: list[str]
+    recommended_next_action: str
