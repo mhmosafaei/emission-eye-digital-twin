@@ -4,7 +4,7 @@ This repository builds the simulator-side foundation and backend plumbing for th
 
 ## Current flow
 
-`simulator.py -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows -> performance windows -> baseline comparisons`
+`simulator.py -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows -> performance windows -> baseline comparisons -> baseline analytics/advisor -> API/demo outputs`
 
 The simulator remains the source of raw telemetry. The enrichment layer adds:
 
@@ -42,6 +42,10 @@ python scripts/run_baseline_comparison.py
 
 python scripts/run_baseline_comparison.py --include-invalid-windows
 
+python scripts/export_analytics_summary.py --output data/analytics_summary.json
+
+python scripts/export_worst_windows_csv.py --output data/worst_windows.csv --limit 20
+
 python scripts/export_windows_csv.py --output data/performance_windows.csv --sea-passage-only
 
 python scripts/export_baseline_comparisons_csv.py \
@@ -60,7 +64,7 @@ python scripts/reset_local_db.py --yes
 uvicorn app.main:app --reload
 ```
 
-Sprint 4 does not train an ML model yet. Sprint 4 creates the adaptive historical baseline layer over stored feature rows and 15-minute performance windows.
+Sprint 5 does not train an ML model, does not build a UI dashboard, and does not add real-time alert delivery. Sprint 5 turns completed baseline comparisons into explainable operational analytics.
 
 ## API examples
 
@@ -88,4 +92,14 @@ curl http://localhost:8000/baseline/latest-completed
 curl "http://localhost:8000/baseline/comparisons?valid_only=true&limit=20"
 
 curl "http://localhost:8000/baseline/comparisons?status=completed&limit=20"
+
+curl http://localhost:8000/analytics/vessel-summary
+
+curl http://localhost:8000/analytics/worst-windows
+
+curl http://localhost:8000/analytics/trend
+
+curl http://localhost:8000/analytics/causes
+
+curl http://localhost:8000/analytics/fleet-ranking
 ```

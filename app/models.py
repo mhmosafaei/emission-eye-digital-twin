@@ -194,6 +194,7 @@ class BaselineComparison(Base):
     classification: Mapped[str] = mapped_column(String(64), nullable=False)
     crew_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     possible_causes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    advisor_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     window: Mapped[PerformanceWindow] = relationship("PerformanceWindow", back_populates="baseline_comparison")

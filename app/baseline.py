@@ -29,10 +29,12 @@ def compare_window_to_baseline(window: PerformanceWindow) -> BaselineComparison:
             classification="invalid_window",
             crew_message=None,
             possible_causes_json=None,
+            advisor_json=None,
         )
         message = generate_baseline_message(comparison, window)
         comparison.crew_message = message["crew_message"]
         comparison.possible_causes_json = message["possible_causes_json"]
+        comparison.advisor_json = message["advisor_json"]
         return comparison
 
     historical_windows = find_similar_historical_windows(
@@ -61,10 +63,12 @@ def compare_window_to_baseline(window: PerformanceWindow) -> BaselineComparison:
             classification="insufficient_history",
             crew_message=None,
             possible_causes_json=None,
+            advisor_json=None,
         )
         message = generate_baseline_message(comparison, window)
         comparison.crew_message = message["crew_message"]
         comparison.possible_causes_json = message["possible_causes_json"]
+        comparison.advisor_json = message["advisor_json"]
         return comparison
 
     baseline = calculate_best_baseline(historical_windows)
@@ -105,10 +109,12 @@ def compare_window_to_baseline(window: PerformanceWindow) -> BaselineComparison:
         classification=classification,
         crew_message=None,
         possible_causes_json=None,
+        advisor_json=None,
     )
     message = generate_baseline_message(comparison, window)
     comparison.crew_message = message["crew_message"]
     comparison.possible_causes_json = message["possible_causes_json"]
+    comparison.advisor_json = message["advisor_json"]
     return comparison
 
 

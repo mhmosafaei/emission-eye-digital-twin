@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Iterator
 
 from sqlalchemy import Select, case, desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from simulator_core.enrichment import enrich_simulator_batch
 
@@ -405,6 +405,67 @@ def get_baseline_comparisons(
         return list(db.execute(statement).scalars().all())
 
 
+def get_completed_baseline_comparisons(
+    vessel_id: str | None = None,
+    state_bucket: str | None = None,
+    limit: int = 1000,
+    session: Session | None = None,
+) -> list[BaselineComparison]:
+    statement: Select[tuple[BaselineComparison]] = (
+        select(BaselineComparison)
+        .options(joinedload(BaselineComparison.window))
+        .where(
+            BaselineComparison.comparison_status == "completed",
+            BaselineComparison.classification.in_(("better", "normal", "worse")),
+        )
+    )
+    if vessel_id:
+        statement = statement.where(BaselineComparison.vessel_id == vessel_id)
+    if state_bucket:
+        statement = statement.where(BaselineComparison.state_bucket == state_bucket)
+    statement = statement.order_by(BaselineComparison.created_at.asc(), BaselineComparison.id.asc()).limit(limit)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def get_worst_completed_comparisons(
+    vessel_id: str | None = None,
+    limit: int = 10,
+    session: Session | None = None,
+) -> list[BaselineComparison]:
+    statement: Select[tuple[BaselineComparison]] = select(BaselineComparison).options(joinedload(BaselineComparison.window)).where(
+        BaselineComparison.comparison_status == "completed",
+        BaselineComparison.classification.in_(("better", "normal", "worse")),
+    )
+    if vessel_id:
+        statement = statement.where(BaselineComparison.vessel_id == vessel_id)
+    statement = statement.order_by(desc(BaselineComparison.performance_gap_pct), desc(BaselineComparison.id)).limit(limit)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def get_completed_comparisons_by_vessel(
+    vessel_id: str,
+    limit: int = 1000,
+    session: Session | None = None,
+) -> list[BaselineComparison]:
+    return get_completed_baseline_comparisons(vessel_id=vessel_id, limit=limit, session=session)
+
+
+def get_distinct_vessel_ids_with_comparisons(session: Session | None = None) -> list[str]:
+    statement = (
+        select(BaselineComparison.vessel_id)
+        .where(
+            BaselineComparison.comparison_status == "completed",
+            BaselineComparison.classification.in_(("better", "normal", "worse")),
+        )
+        .distinct()
+        .order_by(BaselineComparison.vessel_id.asc())
+    )
+    with session_scope(session) as db:
+        return [str(value) for value in db.execute(statement).scalars().all()]
+
+
 def get_latest_baseline_comparison(vessel_id: str | None = None, session: Session | None = None) -> BaselineComparison | None:
     statement = select(BaselineComparison).order_by(desc(BaselineComparison.created_at), desc(BaselineComparison.id)).limit(1)
     if vessel_id:
@@ -582,4 +643,6 @@ def _comparison_payload(comparison: BaselineComparison | dict) -> dict[str, Any]
     payload.setdefault("comparison_uuid", str(uuid.uuid4()))
     if isinstance(payload.get("possible_causes_json"), list):
         payload["possible_causes_json"] = json.dumps(payload["possible_causes_json"])
+    if isinstance(payload.get("advisor_json"), dict):
+        payload["advisor_json"] = json.dumps(payload["advisor_json"])
     return payload

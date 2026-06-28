@@ -150,6 +150,32 @@ python scripts/run_baseline_comparison.py --include-invalid-windows
 python scripts/export_windows_csv.py --output data/performance_windows.csv --sea-passage-only
 ```
 
+## Sprint 5 - Baseline Analytics and Operational Advisor Refinement
+
+Sprint 5 extends the completed baseline layer into demo-ready operational analytics:
+
+`simulator.py -> enrichment -> feature_rows -> performance_windows -> baseline_comparisons -> baseline analytics/advisor -> API/demo outputs`
+
+This sprint does not train an ML model, does not build a dashboard UI, and does not add real-time alert delivery. It turns completed baseline comparisons into explainable vessel summaries, worst-window analysis, trend analytics, cause aggregation, and fleet ranking outputs.
+
+### Example commands
+
+```bash
+python scripts/export_analytics_summary.py --output data/analytics_summary.json
+python scripts/export_analytics_summary.py --vessel-id NODE-ARCTIC-0003 --output data/analytics_summary_NODE-ARCTIC-0003.json
+python scripts/export_worst_windows_csv.py --output data/worst_windows.csv --limit 20
+```
+
+### API examples
+
+```bash
+curl.exe http://localhost:8000/analytics/vessel-summary
+curl.exe http://localhost:8000/analytics/worst-windows
+curl.exe http://localhost:8000/analytics/trend
+curl.exe http://localhost:8000/analytics/causes
+curl.exe http://localhost:8000/analytics/fleet-ranking
+```
+
 ## What remains intentionally simple
 
 - Machinery formulas are configurable heuristics, not a final marine physics model.

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.database import init_db
+from app.routers.analytics import router as analytics_router
 from app.routers.baseline import router as baseline_router
 from app.routers.features import router as features_router
 from app.routers.health import router as health_router
@@ -20,6 +21,7 @@ app.include_router(records_router)
 app.include_router(features_router)
 app.include_router(windows_router)
 app.include_router(baseline_router)
+app.include_router(analytics_router)
 
 
 @app.on_event("startup")

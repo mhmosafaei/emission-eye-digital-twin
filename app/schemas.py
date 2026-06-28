@@ -201,6 +201,7 @@ class BaselineComparisonOut(ModelBase):
     classification: str
     crew_message: str | None = None
     possible_causes_json: str | None = None
+    advisor_json: str | None = None
     created_at: datetime
 
 
@@ -212,3 +213,77 @@ class BaselineSummaryOut(BaseModel):
     insufficient_history: int
     invalid_window: int
     average_gap_pct: float | None = None
+
+
+class AnalyticsCauseOut(BaseModel):
+    cause: str
+    count: int
+
+
+class VesselBaselineSummaryOut(BaseModel):
+    vessel_id: str | None = None
+    completed_comparisons: int
+    better: int
+    normal: int
+    worse: int
+    average_gap_pct: float | None = None
+    median_gap_pct: float | None = None
+    worst_gap_pct: float | None = None
+    best_gap_pct: float | None = None
+    average_fuel_gap_pct: float | None = None
+    dominant_classification: str | None = None
+    baseline_confidence_mean: float | None = None
+    top_possible_causes: list[AnalyticsCauseOut]
+    interpretation: str
+
+
+class WorstBaselineWindowOut(BaseModel):
+    comparison_uuid: str
+    window_id: int
+    vessel_id: str
+    state_bucket: str | None = None
+    current_co2_kg_nm: float | None = None
+    baseline_co2_kg_nm: float | None = None
+    performance_gap_pct: float | None = None
+    current_fuel_kg_nm: float | None = None
+    baseline_fuel_kg_nm: float | None = None
+    fuel_gap_pct: float | None = None
+    classification: str
+    baseline_confidence: float | None = None
+    crew_message: str | None = None
+    possible_causes: list[str]
+
+
+class TrendPointOut(BaseModel):
+    timestamp: str
+    performance_gap_pct: float | None = None
+    fuel_gap_pct: float | None = None
+    classification: str
+    state_bucket: str | None = None
+
+
+class BaselineTrendOut(BaseModel):
+    vessel_id: str | None = None
+    state_bucket: str | None = None
+    points: list[TrendPointOut]
+    rolling_average_gap_pct: float | None = None
+    latest_gap_pct: float | None = None
+    trend_direction: str
+
+
+class PossibleCauseSummaryOut(BaseModel):
+    vessel_id: str | None = None
+    completed_comparisons: int
+    comparisons_with_causes: int
+    top_possible_causes: list[AnalyticsCauseOut]
+
+
+class FleetRankingOut(BaseModel):
+    vessel_id: str
+    completed_comparisons: int
+    average_gap_pct: float | None = None
+    worse: int
+    better: int
+    normal: int
+    dominant_classification: str | None = None
+    baseline_confidence_mean: float | None = None
