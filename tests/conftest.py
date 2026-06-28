@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -54,6 +55,48 @@ def sample_telemetry() -> dict:
     }
 
 
+def make_series_batch(
+    *,
+    vessel_id: str = "NODE-BALTIC-0001",
+    vessel_name: str = "Container Vessel 1",
+    imo_number: str = "9387421",
+    start_time: str = "2026-06-28T00:00:00Z",
+    window_co2_kg_nm_values: list[float] | None = None,
+    samples_per_window: int = 2,
+    sample_spacing_minutes: int = 5,
+) -> dict:
+    window_co2_kg_nm_values = window_co2_kg_nm_values or [80.0, 82.0, 78.0]
+    start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00")).astimezone(timezone.utc)
+    items = []
+    for window_index, co2_kg_nm in enumerate(window_co2_kg_nm_values):
+        window_start = start_dt + timedelta(minutes=window_index * 15)
+        for sample_index in range(samples_per_window):
+            timestamp = window_start + timedelta(minutes=sample_index * sample_spacing_minutes)
+            shaft_power_kw = 9000.0 + (window_index * 150.0) + (sample_index * 25.0)
+            co2_kg_h = co2_kg_nm * 12.0
+            fuel_flow_kg_h = co2_kg_h / 3.114
+            item = sample_telemetry() | {
+                "timestamp_utc": timestamp.isoformat().replace("+00:00", "Z"),
+                "node_id": vessel_id,
+                "vessel_name": vessel_name,
+                "imo_number": imo_number,
+                "distance_from_previous_nm": 1.0,
+                "co2_mass_step_kg": co2_kg_nm,
+                "co2_value": round(co2_kg_h, 6),
+                "fuel_burn_step_kg": round(co2_kg_nm / 3.2, 6),
+                "fuel_burn_rate": round(fuel_flow_kg_h, 6),
+                "required_power_kw": shaft_power_kw,
+                "speed_over_ground": 12.0 + (window_index % 2) * 0.4,
+                "quality_flags": sample_telemetry()["quality_flags"] | {"shaft_power_kw": shaft_power_kw},
+            }
+            items.append(item)
+    return {
+        "batch_id": f"batch-{vessel_id}",
+        "gateway_uid": "GW-BALTIC-0001",
+        "items": items,
+    }
+
+
 def make_workspace_temp_dir() -> Path:
     base_dir = Path("C:\\Users\\nedan\\Downloads\\Projects\\New Digital Twin Project\\test_artifacts")
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -88,6 +131,16 @@ def raw_batch() -> dict:
 @pytest.fixture
 def enriched_batch(raw_batch: dict) -> dict:
     return enrich_simulator_batch(raw_batch)
+
+
+@pytest.fixture
+def window_history_batch() -> dict:
+    return make_series_batch(window_co2_kg_nm_values=[80.0, 82.0, 78.0, 79.0, 81.0, 90.0])
+
+
+@pytest.fixture
+def window_history_enriched_batch(window_history_batch: dict) -> dict:
+    return enrich_simulator_batch(window_history_batch)
 
 
 @pytest.fixture

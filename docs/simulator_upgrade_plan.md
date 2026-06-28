@@ -103,6 +103,53 @@ curl http://localhost:8000/features?valid_for_training=true
 curl http://localhost:8000/state-buckets
 ```
 
+## Sprint 4 - 15-Minute Windows and Adaptive Baseline
+
+Sprint 4 adds the first Digital CO2 Twin intelligence layer:
+
+`simulator.py -> enrichment -> SQLite feature_rows -> 15-minute performance_windows -> baseline_comparisons -> API queries`
+
+This sprint does not train an ML model yet. It builds an adaptive historical baseline by vessel and state bucket so the MVP can ask whether a vessel has performed better before in similar operating conditions.
+
+### Example commands
+
+```bash
+python scripts/build_windows.py --window-minutes 15
+python scripts/run_baseline_comparison.py
+python scripts/export_baseline_comparisons_csv.py --output data/baseline_comparisons.csv
+python -m uvicorn app.main:app --reload
+```
+
+### API examples
+
+```bash
+curl.exe http://localhost:8000/windows/count
+curl.exe http://localhost:8000/baseline/summary
+curl.exe http://localhost:8000/baseline/latest
+curl.exe http://localhost:8000/baseline/latest-completed
+curl.exe "http://localhost:8000/baseline/comparisons?valid_only=true&limit=20"
+curl.exe "http://localhost:8000/baseline/comparisons?status=completed&limit=20"
+```
+
+## Sprint 4.1 - Baseline Cleanup and Window Diagnostics
+
+Sprint 4.1 keeps the baseline layer focused on valid sea-passage intelligence by:
+
+- storing explicit invalid-window reasons,
+- diagnosing why windows are invalid,
+- defaulting baseline comparison runs to valid windows only,
+- exposing a latest-completed baseline endpoint and cleaner comparison filters,
+- exporting performance windows for inspection.
+
+### Example commands
+
+```bash
+python scripts/diagnose_windows.py --sea-passage-only
+python scripts/run_baseline_comparison.py
+python scripts/run_baseline_comparison.py --include-invalid-windows
+python scripts/export_windows_csv.py --output data/performance_windows.csv --sea-passage-only
+```
+
 ## What remains intentionally simple
 
 - Machinery formulas are configurable heuristics, not a final marine physics model.

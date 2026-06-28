@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -109,3 +109,91 @@ class FeatureRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     record: Mapped[EnrichedRecord] = relationship("EnrichedRecord", back_populates="feature_row")
+
+
+class PerformanceWindow(Base):
+    __tablename__ = "performance_windows"
+    __table_args__ = (
+        UniqueConstraint("vessel_id", "window_start_utc", "window_end_utc", name="uq_performance_window_vessel_interval"),
+        Index("ix_performance_windows_vessel_id", "vessel_id"),
+        Index("ix_performance_windows_window_start_utc", "window_start_utc"),
+        Index("ix_performance_windows_dominant_state_bucket", "dominant_state_bucket"),
+        Index("ix_performance_windows_is_valid_window", "is_valid_window"),
+        Index("ix_performance_windows_vessel_id_window_start_utc", "vessel_id", "window_start_utc"),
+        Index("ix_performance_windows_vessel_id_dominant_state_bucket", "vessel_id", "dominant_state_bucket"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    window_uuid: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    vessel_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    window_start_utc: Mapped[str] = mapped_column(String(64), nullable=False)
+    window_end_utc: Mapped[str] = mapped_column(String(64), nullable=False)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    valid_sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    training_valid_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    operation_mode: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    dominant_state_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    state_bucket_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_co2_kg_h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_co2_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_co2_g_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_fuel_flow_kg_h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_fuel_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_sog_kn: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_stw_kn: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_rpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_engine_load_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_shaft_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_draft_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_trim_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_wind_speed_kn: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_relative_wind_angle_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_wave_height_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_depth_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_ukc_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_fouling_multiplier: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_valid_window: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    window_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    invalid_reasons_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    baseline_comparison: Mapped["BaselineComparison | None"] = relationship(
+        "BaselineComparison",
+        back_populates="window",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class BaselineComparison(Base):
+    __tablename__ = "baseline_comparisons"
+    __table_args__ = (
+        UniqueConstraint("window_id", name="uq_baseline_comparisons_window_id"),
+        Index("ix_baseline_comparisons_vessel_id", "vessel_id"),
+        Index("ix_baseline_comparisons_state_bucket", "state_bucket"),
+        Index("ix_baseline_comparisons_classification", "classification"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    comparison_uuid: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    window_id: Mapped[int] = mapped_column(ForeignKey("performance_windows.id"), nullable=False)
+    vessel_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    state_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    comparison_status: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    current_co2_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_co2_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    performance_gap_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_fuel_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_fuel_kg_nm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_gap_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    similar_windows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    baseline_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_window_start_utc: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    baseline_window_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    classification: Mapped[str] = mapped_column(String(64), nullable=False)
+    crew_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    possible_causes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    window: Mapped[PerformanceWindow] = relationship("PerformanceWindow", back_populates="baseline_comparison")

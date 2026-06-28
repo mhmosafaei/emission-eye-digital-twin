@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Iterator
 
 from sqlalchemy import Select, case, desc, func, select
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from simulator_core.enrichment import enrich_simulator_batch
 
 from .database import get_session, init_db
-from .models import EnrichedRecord, FeatureRow
+from .models import BaselineComparison, EnrichedRecord, FeatureRow, PerformanceWindow
 
 
 @contextmanager
@@ -264,6 +265,227 @@ def get_state_bucket_counts(session: Session | None = None) -> list[dict[str, An
         ]
 
 
+def create_performance_window(window: PerformanceWindow | dict, session: Session | None = None) -> PerformanceWindow:
+    init_db()
+    payload = _window_payload(window)
+    with session_scope(session) as db:
+        existing = db.execute(
+            select(PerformanceWindow).where(
+                PerformanceWindow.vessel_id == payload["vessel_id"],
+                PerformanceWindow.window_start_utc == payload["window_start_utc"],
+                PerformanceWindow.window_end_utc == payload["window_end_utc"],
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+
+        model = PerformanceWindow(**payload)
+        db.add(model)
+        db.flush()
+        if session is None:
+            db.commit()
+            db.refresh(model)
+        return model
+
+
+def create_performance_windows(windows: list[PerformanceWindow | dict], session: Session | None = None) -> list[PerformanceWindow]:
+    created: list[PerformanceWindow] = []
+    with session_scope(session) as db:
+        for window in windows:
+            created.append(create_performance_window(window, session=db))
+        if session is None:
+            db.commit()
+    return created
+
+
+def get_performance_windows(
+    vessel_id: str | None = None,
+    state_bucket: str | None = None,
+    valid_only: bool | None = None,
+    limit: int = 100,
+    session: Session | None = None,
+) -> list[PerformanceWindow]:
+    statement: Select[tuple[PerformanceWindow]] = select(PerformanceWindow)
+    if vessel_id:
+        statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
+    if state_bucket:
+        statement = statement.where(PerformanceWindow.dominant_state_bucket == state_bucket)
+    if valid_only is True:
+        statement = statement.where(PerformanceWindow.is_valid_window.is_(True))
+    elif valid_only is False:
+        statement = statement.where(PerformanceWindow.is_valid_window.is_(False))
+    statement = statement.order_by(desc(PerformanceWindow.window_start_utc), desc(PerformanceWindow.id)).limit(limit)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def count_performance_windows(vessel_id: str | None = None, session: Session | None = None) -> int:
+    statement = select(func.count(PerformanceWindow.id))
+    if vessel_id:
+        statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return int(db.execute(statement).scalar_one())
+
+
+def get_uncompared_performance_windows(
+    vessel_id: str | None = None,
+    limit: int = 100,
+    valid_windows_only: bool = True,
+    session: Session | None = None,
+) -> list[PerformanceWindow]:
+    statement: Select[tuple[PerformanceWindow]] = (
+        select(PerformanceWindow)
+        .outerjoin(BaselineComparison, BaselineComparison.window_id == PerformanceWindow.id)
+        .where(BaselineComparison.id.is_(None))
+        .order_by(PerformanceWindow.window_start_utc.asc(), PerformanceWindow.id.asc())
+        .limit(limit)
+    )
+    if vessel_id:
+        statement = statement.where(PerformanceWindow.vessel_id == vessel_id)
+    if valid_windows_only:
+        statement = statement.where(PerformanceWindow.is_valid_window.is_(True))
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def create_baseline_comparison(comparison: BaselineComparison | dict, session: Session | None = None) -> BaselineComparison:
+    init_db()
+    payload = _comparison_payload(comparison)
+    with session_scope(session) as db:
+        existing = db.execute(
+            select(BaselineComparison).where(BaselineComparison.window_id == payload["window_id"])
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+
+        model = BaselineComparison(**payload)
+        db.add(model)
+        db.flush()
+        if session is None:
+            db.commit()
+            db.refresh(model)
+        return model
+
+
+def create_baseline_comparisons(comparisons: list[BaselineComparison | dict], session: Session | None = None) -> list[BaselineComparison]:
+    created: list[BaselineComparison] = []
+    with session_scope(session) as db:
+        for comparison in comparisons:
+            created.append(create_baseline_comparison(comparison, session=db))
+        if session is None:
+            db.commit()
+    return created
+
+
+def get_baseline_comparisons(
+    vessel_id: str | None = None,
+    classification: str | None = None,
+    state_bucket: str | None = None,
+    status: str | None = None,
+    valid_only: bool = False,
+    limit: int = 100,
+    session: Session | None = None,
+) -> list[BaselineComparison]:
+    statement: Select[tuple[BaselineComparison]] = select(BaselineComparison)
+    if vessel_id:
+        statement = statement.where(BaselineComparison.vessel_id == vessel_id)
+    if classification:
+        statement = statement.where(BaselineComparison.classification == classification)
+    if state_bucket:
+        statement = statement.where(BaselineComparison.state_bucket == state_bucket)
+    if status:
+        statement = statement.where(BaselineComparison.comparison_status == status)
+    if valid_only:
+        statement = statement.where(
+            BaselineComparison.comparison_status == "completed",
+            BaselineComparison.classification.in_(("better", "normal", "worse")),
+        )
+    statement = statement.order_by(desc(BaselineComparison.created_at), desc(BaselineComparison.id)).limit(limit)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def get_latest_baseline_comparison(vessel_id: str | None = None, session: Session | None = None) -> BaselineComparison | None:
+    statement = select(BaselineComparison).order_by(desc(BaselineComparison.created_at), desc(BaselineComparison.id)).limit(1)
+    if vessel_id:
+        statement = statement.where(BaselineComparison.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return db.execute(statement).scalar_one_or_none()
+
+
+def get_latest_completed_baseline_comparison(vessel_id: str | None = None, session: Session | None = None) -> BaselineComparison | None:
+    statement = (
+        select(BaselineComparison)
+        .where(
+            BaselineComparison.comparison_status == "completed",
+            BaselineComparison.classification.in_(("better", "normal", "worse")),
+        )
+        .order_by(desc(BaselineComparison.created_at), desc(BaselineComparison.id))
+        .limit(1)
+    )
+    if vessel_id:
+        statement = statement.where(BaselineComparison.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return db.execute(statement).scalar_one_or_none()
+
+
+def get_baseline_summary(vessel_id: str | None = None, session: Session | None = None) -> dict[str, Any]:
+    statement = select(BaselineComparison)
+    if vessel_id:
+        statement = statement.where(BaselineComparison.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        comparisons = list(db.execute(statement).scalars().all())
+
+    total = len(comparisons)
+    by_classification = {
+        "better": 0,
+        "normal": 0,
+        "worse": 0,
+        "insufficient_history": 0,
+        "invalid_window": 0,
+    }
+    gaps = []
+    for comparison in comparisons:
+        by_classification[comparison.classification] = by_classification.get(comparison.classification, 0) + 1
+        if comparison.performance_gap_pct is not None:
+            gaps.append(float(comparison.performance_gap_pct))
+    return {
+        "total_comparisons": total,
+        **by_classification,
+        "average_gap_pct": round(sum(gaps) / len(gaps), 6) if gaps else None,
+    }
+
+
+def get_feature_rows_for_windowing(vessel_id: str | None = None, session: Session | None = None) -> list[FeatureRow]:
+    statement: Select[tuple[FeatureRow]] = select(FeatureRow).order_by(FeatureRow.vessel_id.asc(), FeatureRow.timestamp_utc.asc(), FeatureRow.id.asc())
+    if vessel_id:
+        statement = statement.where(FeatureRow.vessel_id == vessel_id)
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
+def find_historical_performance_windows(
+    vessel_id: str,
+    state_bucket: str,
+    before_time: str,
+    limit: int = 100,
+    session: Session | None = None,
+) -> list[PerformanceWindow]:
+    statement: Select[tuple[PerformanceWindow]] = (
+        select(PerformanceWindow)
+        .where(
+            PerformanceWindow.vessel_id == vessel_id,
+            PerformanceWindow.dominant_state_bucket == state_bucket,
+            PerformanceWindow.is_valid_window.is_(True),
+            PerformanceWindow.window_start_utc < before_time,
+        )
+        .order_by(desc(PerformanceWindow.window_start_utc), desc(PerformanceWindow.id))
+        .limit(limit)
+    )
+    with session_scope(session) as db:
+        return list(db.execute(statement).scalars().all())
+
+
 def _apply_record_filters(
     statement: Select[tuple[EnrichedRecord]],
     vessel_id: str | None,
@@ -343,3 +565,21 @@ def _calculate_data_quality_score(item: dict, ee_enrichment: dict) -> float | No
     if uncertainty is not None:
         score -= uncertainty * 0.5
     return round(max(0.0, min(score, 100.0)), 3)
+
+
+def _window_payload(window: PerformanceWindow | dict) -> dict[str, Any]:
+    if isinstance(window, PerformanceWindow):
+        return {column.name: getattr(window, column.name) for column in PerformanceWindow.__table__.columns if column.name != "id"}
+    payload = dict(window)
+    payload.setdefault("window_uuid", str(uuid.uuid4()))
+    return payload
+
+
+def _comparison_payload(comparison: BaselineComparison | dict) -> dict[str, Any]:
+    if isinstance(comparison, BaselineComparison):
+        return {column.name: getattr(comparison, column.name) for column in BaselineComparison.__table__.columns if column.name != "id"}
+    payload = dict(comparison)
+    payload.setdefault("comparison_uuid", str(uuid.uuid4()))
+    if isinstance(payload.get("possible_causes_json"), list):
+        payload["possible_causes_json"] = json.dumps(payload["possible_causes_json"])
+    return payload
