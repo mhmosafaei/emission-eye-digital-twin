@@ -6,7 +6,7 @@ from .feature_store import telemetry_to_feature_row
 from .machinery import AuxiliaryEngineSystem, BoilerSystem, MachinerySnapshot, MainEngine
 from .scenarios import ScenarioConfig
 from .sensor_model import synthesize_sensor_readings
-from .state_buckets import build_state_bucket
+from .state_buckets import build_state_bucket, normalize_operation_mode
 from .validation_suite import summarize_telemetry
 from .vessel_geometry import (
     calculate_depth_draft_ratio,
@@ -89,6 +89,9 @@ def enrich_simulator_item(item: dict, scenario: ScenarioConfig | None = None) ->
     enriched_item = deepcopy(working_item)
     enriched_item["ee_enrichment"] = {
         "state_bucket": state_bucket,
+        "operation_mode": normalize_operation_mode(
+            derived_item.get("operation_mode") or derived_item.get("vessel_mode")
+        ),
         "is_valid_for_training": feature_row["is_valid_for_training"],
         "feature_row": feature_row,
         "sensor_fields": sensor_fields,

@@ -4,7 +4,9 @@ from .vessel_geometry import calculate_depth_draft_ratio, classify_depth_conditi
 
 
 def build_state_bucket(telemetry_item: dict) -> str:
-    operation_mode = _normalize_operation_mode(telemetry_item)
+    operation_mode = normalize_operation_mode(
+        telemetry_item.get("operation_mode") or telemetry_item.get("vessel_mode")
+    )
     loading_label = _loading_label(telemetry_item)
     speed_label = _range_label("speed", float(telemetry_item.get("speed_over_ground") or 0.0), 2, 20)
     load_pct = float(telemetry_item.get("engine_load_ratio") or 0.0) * 100.0
@@ -27,15 +29,34 @@ def build_state_bucket(telemetry_item: dict) -> str:
     )
 
 
-def _normalize_operation_mode(telemetry_item: dict) -> str:
-    mode = str(telemetry_item.get("vessel_mode") or telemetry_item.get("operation_mode") or "sea_passage").lower()
-    if "stop" in mode:
-        return "stopped"
-    if "manoeuv" in mode or "maneuv" in mode:
+def normalize_operation_mode(value: str | None) -> str:
+    if value is None:
+        return "unknown"
+
+    mode = str(value).strip()
+    if not mode:
+        return "unknown"
+
+    lowered = mode.lower()
+    if lowered == "sea_passage":
+        return "sea_passage"
+    if lowered == "maneuvering":
         return "maneuvering"
-    if "anchor" in mode:
+    if lowered == "port":
+        return "port"
+    if lowered == "anchorage":
         return "anchorage"
-    return "sea_passage"
+    if lowered == "stopped":
+        return "stopped"
+    if lowered == "steaming":
+        return "sea_passage"
+    if "manoeuvring" in lowered or "maneuvering" in lowered or "maneuvring" in lowered:
+        return "maneuvering"
+    if "stop" in lowered:
+        return "stopped"
+    if "anchor" in lowered:
+        return "anchorage"
+    return "unknown"
 
 
 def _loading_label(telemetry_item: dict) -> str:

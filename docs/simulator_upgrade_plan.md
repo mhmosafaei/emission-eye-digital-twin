@@ -53,6 +53,56 @@ python scripts/export_features_from_enriched_jsonl.py --input data/enriched_simu
 python scripts/validate_enriched_simulator_run.py --input data/enriched_simulator_output.jsonl --output data/validation_summary.json
 ```
 
+## Sprint 3 - FastAPI and SQLite Backend
+
+Sprint 3 adds persistent storage and API access for enriched telemetry:
+
+`simulator.py -> enrichment layer -> enriched JSONL -> FastAPI ingestion -> SQLite storage -> feature rows`
+
+### Backend flow
+
+- `scripts/ingest_enriched_jsonl.py` stores enriched batches into SQLite.
+- `app.main` exposes FastAPI endpoints for ingest, record queries, feature queries, and state-bucket summaries.
+- `feature_rows` are normalized from `ee_enrichment.feature_row` for downstream model and analytics workflows.
+
+### Example commands
+
+```bash
+python scripts/run_simulator_limited.py --output data/simulator_output.jsonl --batches 10
+
+python scripts/run_simulator_limited.py \
+  --output data/simulator_output.jsonl \
+  --batches 200 \
+  --profile sea-passage \
+  --reset-output \
+  --seed 42
+
+python scripts/enrich_simulator_jsonl.py \
+  --input data/simulator_output.jsonl \
+  --output data/enriched_simulator_output.jsonl
+
+python scripts/ingest_enriched_jsonl.py \
+  --input data/enriched_simulator_output.jsonl
+
+uvicorn app.main:app --reload
+
+python scripts/reset_local_db.py --yes
+```
+
+### API examples
+
+```bash
+curl http://localhost:8000/health
+
+curl -X POST http://localhost:8000/ingest/enriched-batch \
+  -H "Content-Type: application/json" \
+  --data @data/sample_enriched_batch.json
+
+curl http://localhost:8000/records/count
+curl http://localhost:8000/features?valid_for_training=true
+curl http://localhost:8000/state-buckets
+```
+
 ## What remains intentionally simple
 
 - Machinery formulas are configurable heuristics, not a final marine physics model.

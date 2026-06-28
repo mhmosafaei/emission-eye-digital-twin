@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-from .state_buckets import build_state_bucket
+from .state_buckets import build_state_bucket, normalize_operation_mode
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,20 @@ def telemetry_to_feature_row(telemetry_item: dict) -> FeatureRow:
     draft_m = float(telemetry_item.get("draft") or telemetry_item.get("draft_m") or 0.0)
     trim_m = float(telemetry_item.get("trim_m") or 0.0)
     state_bucket = build_state_bucket(telemetry_item)
-    training_valid = _is_valid_for_training(telemetry_item, co2_kg_nm)
+    operation_mode = normalize_operation_mode(
+        telemetry_item.get("operation_mode") or telemetry_item.get("vessel_mode")
+    )
+    training_valid = _is_valid_for_training(
+        telemetry_item=telemetry_item,
+        operation_mode=operation_mode,
+        sog_kn=sog_kn,
+        co2_kg_h=co2_kg_h,
+        co2_kg_nm=co2_kg_nm,
+        co2_g_kwh=co2_g_kwh,
+        shaft_power_kw=shaft_power_kw,
+        fuel_flow_kg_h=fuel_flow_kg_h,
+        state_bucket=state_bucket,
+    )
 
     return FeatureRow(
         timestamp_utc=str(telemetry_item.get("timestamp_utc") or ""),
@@ -79,7 +92,7 @@ def telemetry_to_feature_row(telemetry_item: dict) -> FeatureRow:
             or telemetry_item.get("vessel_name")
             or "unknown_vessel"
         ),
-        operation_mode=str(telemetry_item.get("vessel_mode") or telemetry_item.get("operation_mode") or "unknown"),
+        operation_mode=operation_mode,
         sog_kn=round(sog_kn, 6),
         stw_kn=round(stw_kn, 6),
         rpm=float(telemetry_item.get("rpm") or 0.0),
@@ -103,14 +116,40 @@ def telemetry_to_feature_row(telemetry_item: dict) -> FeatureRow:
     )
 
 
-def _is_valid_for_training(telemetry_item: dict, co2_kg_nm: float | None) -> bool:
-    if co2_kg_nm is None:
+def _is_valid_for_training(
+    *,
+    telemetry_item: dict,
+    operation_mode: str,
+    sog_kn: float,
+    co2_kg_h: float,
+    co2_kg_nm: float | None,
+    co2_g_kwh: float | None,
+    shaft_power_kw: float,
+    fuel_flow_kg_h: float,
+    state_bucket: str,
+) -> bool:
+    if operation_mode != "sea_passage":
         return False
-    if telemetry_item.get("validation_status") in {"uncalibrated_synthetic"}:
+    if sog_kn < 6.0:
         return False
-    if float(telemetry_item.get("confidence_score") or 0.0) < 50.0:
+    if co2_kg_h <= 0:
         return False
-    for field_name in ("timestamp_utc", "fuel_burn_rate", "co2_value", "speed_over_ground"):
-        if telemetry_item.get(field_name) in {None, ""}:
-            return False
+    if co2_kg_nm is None or co2_kg_nm <= 0:
+        return False
+    if co2_g_kwh is None or co2_g_kwh <= 0:
+        return False
+    if shaft_power_kw <= 0:
+        return False
+    if fuel_flow_kg_h <= 0:
+        return False
+    if not state_bucket:
+        return False
+    if telemetry_item.get("timestamp_utc") in {None, ""}:
+        return False
+    confidence_score = telemetry_item.get("confidence_score")
+    if confidence_score is not None and float(confidence_score) < 30.0:
+        return False
+    uncertainty_pct = telemetry_item.get("uncertainty_pct")
+    if uncertainty_pct is not None and float(uncertainty_pct) > 80.0:
+        return False
     return True

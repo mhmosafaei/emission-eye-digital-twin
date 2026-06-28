@@ -4,6 +4,7 @@ import os
 import shutil
 from pathlib import Path
 
+from scripts.diagnose_training_validity import diagnose_training_validity
 from scripts.enrich_simulator_jsonl import enrich_jsonl
 from scripts.export_features_from_enriched_jsonl import export_features
 from scripts.validate_enriched_simulator_run import validate_enriched_run
@@ -12,7 +13,7 @@ from simulator_core.feature_store import telemetry_to_feature_row
 from simulator_core.machinery import AuxiliaryEngineSystem, BoilerSystem, MachinerySnapshot, MainEngine
 from simulator_core.scenarios import load_scenario
 from simulator_core.sensor_model import synthesize_sensor_readings
-from simulator_core.state_buckets import build_state_bucket
+from simulator_core.state_buckets import build_state_bucket, normalize_operation_mode
 from simulator_core.validation_suite import summarize_telemetry
 from simulator_core.vessel_geometry import (
     VesselGeometry,
@@ -135,12 +136,52 @@ def test_state_bucket_generation() -> None:
     assert bucket == "sea_passage|laden|speed_12_14|load_50_70|head_wind_15_25|wave_1_2m|deep_water|moderate_fouling"
 
 
+def test_normalize_operation_mode_steaming_to_sea_passage() -> None:
+    assert normalize_operation_mode("Steaming") == "sea_passage"
+
+
 def test_feature_row_generation() -> None:
     row = telemetry_to_feature_row(sample_telemetry())
     assert row.vessel_id == "NODE-BALTIC-0001"
     assert row.stw_kn == 12.8
     assert row.co2_kg_nm == round(1133.496 / 2.64, 6)
     assert row.is_valid_for_training is True
+
+
+def test_feature_row_operation_mode_is_normalized() -> None:
+    row = telemetry_to_feature_row(sample_telemetry())
+    assert row.operation_mode == "sea_passage"
+
+
+def test_sea_passage_feature_row_can_be_valid_for_training() -> None:
+    row = telemetry_to_feature_row(sample_telemetry())
+    assert row.operation_mode == "sea_passage"
+    assert row.is_valid_for_training is True
+
+
+def test_invalid_when_co2_kg_nm_missing() -> None:
+    item = sample_telemetry() | {"distance_from_previous_nm": None, "co2_mass_step_kg": None}
+    row = telemetry_to_feature_row(item)
+    assert row.co2_kg_nm is None
+    assert row.is_valid_for_training is False
+
+
+def test_invalid_when_co2_g_kwh_missing() -> None:
+    item = sample_telemetry()
+    item["quality_flags"] = item["quality_flags"] | {"shaft_power_kw": 0.0}
+    item["required_power_kw"] = 0.0
+    row = telemetry_to_feature_row(item)
+    assert row.co2_g_kwh is None
+    assert row.is_valid_for_training is False
+
+
+def test_invalid_when_shaft_power_missing() -> None:
+    item = sample_telemetry()
+    item["quality_flags"] = item["quality_flags"] | {"shaft_power_kw": 0.0}
+    item["required_power_kw"] = 0.0
+    row = telemetry_to_feature_row(item)
+    assert row.shaft_power_kw == 0.0
+    assert row.is_valid_for_training is False
 
 
 def test_validation_summary() -> None:
@@ -235,5 +276,24 @@ def test_validate_enriched_simulator_run() -> None:
         assert summary["sample_count"] == 2
         assert summary["training_valid_rate"] == 1.0
         assert summary_path.exists()
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_diagnose_training_validity_script() -> None:
+    batch = {"batch_id": "batch-1", "items": [sample_telemetry(), sample_telemetry() | {"distance_from_previous_nm": None, "co2_mass_step_kg": None}]}
+    tmp_path = make_workspace_temp_dir()
+    try:
+        input_path = tmp_path / "input.jsonl"
+        enriched_path = tmp_path / "enriched.jsonl"
+        input_path.write_text(json.dumps(batch) + "\n", encoding="utf-8")
+        enrich_jsonl(input_path, enriched_path)
+
+        summary = diagnose_training_validity(input_path=enriched_path)
+        assert summary["total_rows"] == 2
+        assert summary["valid_for_training_count"] == 1
+        assert summary["sea_passage_rows"] == 2
+        assert summary["operation_mode_counts"]["sea_passage"] == 2
+        assert summary["missing_co2_kg_nm_count"] == 1
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
